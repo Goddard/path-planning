@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
-<!-- Written by QtCreator 4.0.2, 2017-09-26T11:32:46. -->
+<!-- Written by QtCreator 4.0.2, 2017-10-01T22:23:29. -->
 <qtcreator>
  <data>
   <variable>EnvironmentId</variable>
@@ -344,9 +344,12 @@
     <value type="QString" key="CMakeProjectManager.CMakeRunConfiguation.Title">path_planning</value>
     <value type="QString" key="CMakeProjectManager.CMakeRunConfiguration.Arguments"></value>
     <value type="QString" key="CMakeProjectManager.CMakeRunConfiguration.UserWorkingDirectory"></value>
-    <value type="QString" key="CMakeProjectManager.CMakeRunConfiguration.UserWorkingDirectory.default">/home/irenicus/Projects/udacity/CarND-Path-Planning-Project</value>
+    <value type="QString" key="CMakeProjectManager.CMakeRunConfiguration.UserWorkingDirectory.default">/home/irenicus/Projects/udacity/CarND-Path-Planning-Project/build</value>
     <value type="int" key="PE.EnvironmentAspect.Base">2</value>
-    <valuelist type="QVariantList" key="PE.EnvironmentAspect.Changes"/>
+    <valuelist type="QVariantList" key="PE.EnvironmentAspect.Changes">
+     <value type="QString">PATH=/usr/lib/x86_64-linux-gnu/qt5/bin:/usr/bin:/home/irenicus/.local/bin:/home/irenicus/bin:/home/irenicus/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/include/</value>
+     <value type="QString">LD_LIBRARY_PATH=/usr/lib64/</value>
+    </valuelist>
     <value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">path_planning (disabled)</value>
     <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName"></value>
     <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">CMakeProjectManager.CMakeRunConfiguration.path_planning</value>

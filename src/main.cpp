@@ -12,10 +12,6 @@
 #include "json.hpp"
 #include "spline.h"
 
-#include "road.h"
-
-#include "vehicle.h"
-
 using namespace std;
 
 // for convenience
@@ -179,7 +175,26 @@ int main()
     // Waypoint map to read from
     string map_file_ = "../data/highway_map.csv";
     // The max s value before wrapping around the track back to 0
-    double max_s = 6945.554;
+    const double max_s = 6945.554;
+
+    // start in lane 1
+    int lane = 1;
+
+    // have a reference velocity to target
+    double ref_vel = 0.0; // mph
+    const double max_a = 0.224;
+
+    const double speed_limit = 50;
+    const double buffer_v = 2.0;
+    const double target_speed = 48;
+
+    const double stop_cost = 0.88;
+    double speed_cost = 0;
+
+    int target_lane = 1;
+    bool start_wait = false;
+
+    const double max_s_distance = 30;
 
     ifstream in_map_ ( map_file_.c_str(), ifstream::in );
 
@@ -203,14 +218,22 @@ int main()
         map_waypoints_dy.push_back ( d_y );
     }
 
-    // start in lane 1
-    int lane = 1;
-
-    // have a reference velocity to target
-    double ref_vel = 0.0; // mph
-    
-    h.onMessage ( [&ref_vel, &lane, &map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy] ( uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
-    uWS::OpCode opCode ) {
+    h.onMessage ( [
+                  &ref_vel,
+                  &lane,
+                  &speed_limit,
+                  &buffer_v,
+                  &target_speed,
+                  &stop_cost,
+                  &speed_cost,
+                  &max_a,
+                  &max_s,
+                  &start_wait,
+                  &target_lane,
+                  &max_s_distance,
+                  &map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy
+                  ] ( uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+                  uWS::OpCode opCode ) {
         // "42" at the start of the message means there's a websocket message event.
         // The 4 signifies a websocket message
         // The 2 signifies a websocket event
@@ -246,15 +269,25 @@ int main()
                     // Sensor Fusion Data, a list of all other cars on the same side of the road.
                     // auto sensor_fusion = j[1]["sensor_fusion"];
                     vector<vector<double>> sensor_fusion = j[1]["sensor_fusion"];
-                    
+
                     int prev_size = previous_path_x.size();
 
+                    // prevent assigning a null value
                     if ( prev_size > 0 ) {
                         car_s = end_path_s;
                     }
 
+                    // flag for being to close to vehicle ahead
                     bool too_close = false;
-                    
+                    double check_s_difference = 30.0;
+                    double s_difference = 0;
+                    double d_difference = 0;
+
+                    double left_front_distance = 9000;
+                    double left_rear_distance = 9000;
+                    double right_front_distance = 9000;
+                    double right_rear_distance = 9000;
+
                     // find rev_v to use
                     for ( int i = 0; i < sensor_fusion.size(); i++ ) {
                         //left to right lanes 0, 1, 2
@@ -262,126 +295,184 @@ int main()
                         bool front = false;
                         bool rear = false;
                         bool right = false;
-                        
-                        bool lane_one = true;
-                        bool lane_two = true;
-                        bool lane_three = true;
-                        
+
                         double vx = sensor_fusion[i][3];
                         double vy = sensor_fusion[i][4];
                         double check_speed = sqrt ( vx * vx + vy * vy );
+
+                        // longitude or y or distance front to back
                         double check_car_s = sensor_fusion[i][5];
-                        
-                        // car is in my lane
+
+                        // latitude or x or lane
                         float d = sensor_fusion[i][6];
 
-                        int oc_lane = -1;
-                        for ( int i = 0; i < 3; i++ ) {
-                            if ( d < ( 2 + 4 * i + 2 ) && d > ( 2 + 4 * i - 2 ) ) {
-                                oc_lane = i;
-                                // is the car in i lane ahead of us && is it less then 50 meters
 
-                                // need to change this to create zones around car to determine if any where around the car is blocked
-                                // since we don't have some kind of radar this is the best method to avoid accidents i think :D
-                                double safe_distance = distance( car_x, car_y, vx, vy );
-                                
-                                cout << "distance " << safe_distance << endl;
-                                
-                                if ( safe_distance < (car_x - 200)  &&  safe_distance > (car_x + 200)) {
-//                                 if( ( ( sensor_fusion[i][5] - car_s ) > 50 ) ) { //sensor_fusion[i][5] > car_s ) && (
-                                    if ( oc_lane == 0 ) {
-                                        lane_three = true;
-                                        cout << ", lane 0 " << lane_three;
-                                    }
+                        // need to change this to create zones around car to determine if any where around the car is blocked
+                        // since we don't have some kind of radar this is the best method to avoid accidents i think :D
+                        //                        double safe_distance = helper.distance( car_x, car_y, vx, vy );
 
-                                    if ( oc_lane == 1 ) {
-                                        lane_two = true;
-                                        cout << ", lane 1 " << lane_two;
-                                    }
+                        s_difference = check_car_s - car_s;
+                        d_difference = d - car_d;
 
-                                    if ( oc_lane == 2 ) {
-                                        lane_one = true;
-                                        cout << ", lane 2 " << lane_one;
-                                    }
-                                    
-                                    cout << endl;
-                                    
-                                } else {
-                                    if ( oc_lane == 0 ) {
-                                        lane_three = false;
-                                    }
-                                    
-                                    if ( oc_lane == 1 ) {
-                                        lane_two = false;
-                                    }
-                                    
-                                    if ( oc_lane == 2 ) {
-                                        lane_one = false;
-                                    }
-                                }
+                        // only check 30 m ahead and 40 behind
+                        // this is some what usable, but without longer memory it will never move to lane 2.
+                        if(s_difference < 30 && s_difference > -40) {
+                            //                            cout << "distance, s difference, d difference " << safe_distance << ", " << s_difference << ", " << d_difference << endl;
+
+                            if(d_difference > 2 && d_difference < 6) {
+                                right = true;
+                            }
+
+                            else if(d_difference < -2 && d_difference > -6) {
+                                left = true;
+                            }
+
+                            else if(d_difference > -2 && d_difference < 2) {
+                                front = true;
+                            }
+
+                            // DEBUG
+                            //                            if (right)
+                            //                                cout << "Right" << endl;
+
+                            //                            if (left)
+                            //                                cout << "Left" << endl;
+
+                            //                            if (front)
+                            //                                cout << "Front" << endl;
+                        }
+
+                        //                        double lane_calc = ( 2 + 4 * lane + 2 );
+                        // left of my car lane
+                        if ( lane > 0 )
+                        {
+                            if ( d < ( 2 + 4 * ( lane - 1 ) + 2 ) && d > ( 2 + 4 * ( lane - 1 ) - 2 ) )
+                            {
+                                check_car_s += ( ( double ) prev_size * 0.02 * check_speed );
+                                if (check_car_s > car_s && (check_car_s - car_s) < left_front_distance)
+                                    left_front_distance = check_car_s - car_s;
+
+                                if (check_car_s < car_s && (car_s - check_car_s) < left_rear_distance)
+                                    left_rear_distance = car_s - check_car_s;
                             }
                         }
 
-//                         if(car_s < sensor_fusion[i][5]) {
-//                             cout << "lane : " << lane << endl;
-//                             cout << "pos : " << ( 2 + 4 * lane + 2 ) << endl;
-//                             cout << "car : " << car_s << ", " << car_d << endl;
-//                             //                             cout << "other car : " << sensor_fusion[i][3] << ", " << sensor_fusion[i][4] << endl << endl;
-//                             cout << "other car lane : " << oc_lane << endl;
-//                             cout << "other car : " << sensor_fusion[i][5] << ", " << sensor_fusion[i][6] << endl << endl;
-//                         }
+                        // right of my car lane
+                        if (lane < 2)
+                        {
+                            if ( d < ( 2 + 4 * ( lane + 1 ) + 2 ) && d > ( 2 + 4 *( lane + 1) - 2 ) )
+                            {
+                                check_car_s += ( ( double ) prev_size * 0.02 * check_speed );
+                                if (check_car_s > car_s && (check_car_s - car_s) < right_front_distance)
+                                    right_front_distance = check_car_s - car_s;
 
-                        if ( d < ( 2 + 4 * lane + 2 ) && d > ( 2 + 4 * lane - 2 ) ) {
-                            // if using previous points can project s value out
+                                if (check_car_s < car_s && (car_s - check_car_s) < right_rear_distance)
+                                    right_rear_distance = car_s - check_car_s;
+                            }
+                        }
+
+                        // cars in my cars current lane
+                        if ( d < ( 2 + 4 * lane + 2 ) && d > ( 2 + 4 * lane - 2 ) )
+                        {
                             check_car_s += ( ( double ) prev_size * 0.02 * check_speed );
 
-                            //check s values greater than mine and s gap
-                            if ( ( check_car_s > car_s ) && ( ( check_car_s - car_s ) < 30 ) ) {
-                                ref_vel -= 0.224;
-                                
+                            // avoid accidents and don't get within max_s_distance which is 30
+                            if ((check_car_s > car_s) && ((check_car_s - car_s) < max_s_distance ))
+                            {
                                 too_close = true;
-
-                                cout << "lane, l1, l2, l3 : " << lane << ", " << lane_one << ", " << lane_two << ", " << lane_three << endl << endl;
-
-                                // check left lane and see if we can move over
-                                // if not lets move to another
-                                if ( lane == 0 ) {
-                                    if ( lane_two ) {
-                                        lane = 1;
-                                    }
-                                    continue;
-                                }                                
-                                
-                                else if ( lane == 1 ) {
-                                    if ( lane_three ) {
-                                        lane = 0;
-                                        cout << "lane 1 move to 0" << endl;
-                                        continue;
-                                    }
-
-                                    else if ( lane_one ){
-                                        lane = 2;
-                                        cout << "lane 2 move to 1" << endl;
-                                        continue;
-                                    }
-                                }
-
-                                else if ( lane == 2 ) {
-                                    if ( lane_two ) {
-                                        lane = 1;
-                                    }
-                                    continue;
-                                }
+                                check_s_difference = check_car_s - car_s;
                             }
                         }
+
+                        //                        if ( d < ( 2 + 4 * lane + 2 ) && d > ( 2 + 4 * lane - 2 ) ) {
+                        //                            // if using previous points can project s value out
+                        //                            check_car_s += ( ( double ) prev_size * 0.02 * check_speed );
+
+                        //                            //check s values greater than mine and s gap
+                        //                            if ( ( check_car_s > car_s ) && ( ( check_car_s - car_s ) < 30 ) ) {
+
+                        //                                too_close = true;
+
+                        //                                // check left lane and see if we can move over
+                        //                                // if not lets move to another
+                        //                                if ( lane != 0 && !left ) {
+                        //                                    lane--;
+                        //                                }
+
+                        //                                else if ( lane != 2 && !right) {
+                        //                                    lane++;
+                        //                                }
+                        //                            }
+                        //                        }
+
                     }
 
+                    // speed costs
                     if ( too_close ) {
-                        ref_vel -= 0.224;
+                        ref_vel -= min( 0.8, 10.0 / check_s_difference );
                     }
 
-                    else if ( ref_vel < 49.5 ) {
-                        ref_vel += 0.224;
+                    else if ( ref_vel > speed_limit ) {
+                        speed_cost = 1;
+                        ref_vel -= 0.5;
+                    }
+
+                    else if ( ref_vel < target_speed ) {
+                        ref_vel += 0.5;
+                        speed_cost = stop_cost * ((target_speed - ref_vel) / target_speed);
+                    }
+
+                    else if( ref_vel > target_speed && ref_vel < speed_limit ) {
+                        speed_cost  = (ref_vel - target_speed) / buffer_v;
+                    }
+
+                    if(check_s_difference < 5.0)
+                        ref_vel -= 1.0;
+
+                    // avoid going negative
+                    if (ref_vel < 0.0)
+                        ref_vel = 0.0;
+
+                    // Initial start up flag
+                    if ( car_speed > 25.0 && !start_wait && too_close )
+                    {
+                        start_wait = true;
+                    }
+
+                    // find the middle safe area to make lane changes
+                    if (car_speed < 45.0 && check_s_difference < 30.0 && start_wait && check_s_difference > 10.0)
+                    {
+                        // change lanes once again if previous is complete and we are in center
+                        bool lane_change_completed = car_d < ( 2 + 4 * target_lane + 1 ) && car_d > ( 2 + 4 * target_lane - 1 );
+
+                        // no lane changes when we are at origin, or end of s coordinates because it will mess stuff up
+                        if (lane_change_completed && car_s > 50 && car_s < max_s && car_speed > 35)
+                        {
+                            bool turn_left = false;
+                            bool turn_right = false;
+
+                            // left lane is open
+                            if ( lane > 0 && left_front_distance > 30 && left_rear_distance>20 )
+                                turn_left = true;
+
+                            // right lane is open
+                            if ( lane < 2 && right_front_distance > 30 && right_rear_distance>20 )
+                                turn_right = true;
+
+                            // if only left open or it has greater distance
+                            if ((turn_left && !turn_right) || ((turn_left && turn_right) && (left_front_distance > right_front_distance)))
+                            {
+                                lane -= 1;
+                                target_lane = lane;
+                            }
+
+                            // if only right open or it has greater distance
+                            if ((turn_right && !turn_left) || ((turn_right && turn_left) && (right_front_distance > left_front_distance)))
+                            {
+                                lane += 1;
+                                target_lane = lane;
+                            }
+                        }
                     }
 
                     vector<double> ptsx;
@@ -482,8 +573,6 @@ int main()
                         double x_ref = x_point;
                         double y_ref = y_point;
 
-                        // cout << x_ref << ", " << y_ref;
-
                         // rotate back to normal after rotating it earlier
                         // basis transform?
                         x_point = ( x_ref * cos ( ref_yaw ) - y_ref * sin ( ref_yaw ) );
@@ -497,7 +586,6 @@ int main()
                     }
 
                     json msgJson;
-                    // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
                     msgJson["next_x"] = next_x_vals;
                     msgJson["next_y"] = next_y_vals;
 
@@ -518,7 +606,7 @@ int main()
     // program
     // doesn't compile :-(
     h.onHttpRequest ( [] ( uWS::HttpResponse *res, uWS::HttpRequest req, char *data,
-    size_t, size_t ) {
+                      size_t, size_t ) {
         const std::string s = "<h1>Hello world!</h1>";
         if ( req.getUrl().valueLength == 1 ) {
             res->end ( s.data(), s.length() );
@@ -533,7 +621,7 @@ int main()
     } );
 
     h.onDisconnection ( [&h] ( uWS::WebSocket<uWS::SERVER> ws, int code,
-    char *message, size_t length ) {
+                        char *message, size_t length ) {
         ws.close();
         std::cout << "Disconnected" << std::endl;
     } );
@@ -547,4 +635,3 @@ int main()
     }
     h.run();
 }
-
