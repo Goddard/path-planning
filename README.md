@@ -1,3 +1,5 @@
+![Alt text](Screenshot_20171001_230948.png "Path Planning with Splines")
+
 ### Goals
 In this project my goal was to safely navigate around a virtual highway. To do that a few constraints were also placed on the simulation.  They are listed below.
  1. Don't crash, that includes accidents where vehicles rear end you.
