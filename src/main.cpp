@@ -288,7 +288,6 @@ int main()
                     double right_front_distance = 9000;
                     double right_rear_distance = 9000;
 
-                    // find rev_v to use
                     for ( int i = 0; i < sensor_fusion.size(); i++ ) {
                         //left to right lanes 0, 1, 2
                         bool left = false;
@@ -308,8 +307,7 @@ int main()
 
 
                         // need to change this to create zones around car to determine if any where around the car is blocked
-                        // since we don't have some kind of radar this is the best method to avoid accidents i think :D
-                        //                        double safe_distance = helper.distance( car_x, car_y, vx, vy );
+                        // since we don't have some kind of radar this is the best method to avoid accidents i think
 
                         s_difference = check_car_s - car_s;
                         d_difference = d - car_d;
@@ -317,8 +315,6 @@ int main()
                         // only check 30 m ahead and 40 behind
                         // this is some what usable, but without longer memory it will never move to lane 2.
                         if(s_difference < 30 && s_difference > -40) {
-                            //                            cout << "distance, s difference, d difference " << safe_distance << ", " << s_difference << ", " << d_difference << endl;
-
                             if(d_difference > 2 && d_difference < 6) {
                                 right = true;
                             }
@@ -330,19 +326,8 @@ int main()
                             else if(d_difference > -2 && d_difference < 2) {
                                 front = true;
                             }
-
-                            // DEBUG
-                            //                            if (right)
-                            //                                cout << "Right" << endl;
-
-                            //                            if (left)
-                            //                                cout << "Left" << endl;
-
-                            //                            if (front)
-                            //                                cout << "Front" << endl;
                         }
 
-                        //                        double lane_calc = ( 2 + 4 * lane + 2 );
                         // left of my car lane
                         if ( lane > 0 )
                         {
@@ -383,28 +368,6 @@ int main()
                                 check_s_difference = check_car_s - car_s;
                             }
                         }
-
-                        //                        if ( d < ( 2 + 4 * lane + 2 ) && d > ( 2 + 4 * lane - 2 ) ) {
-                        //                            // if using previous points can project s value out
-                        //                            check_car_s += ( ( double ) prev_size * 0.02 * check_speed );
-
-                        //                            //check s values greater than mine and s gap
-                        //                            if ( ( check_car_s > car_s ) && ( ( check_car_s - car_s ) < 30 ) ) {
-
-                        //                                too_close = true;
-
-                        //                                // check left lane and see if we can move over
-                        //                                // if not lets move to another
-                        //                                if ( lane != 0 && !left ) {
-                        //                                    lane--;
-                        //                                }
-
-                        //                                else if ( lane != 2 && !right) {
-                        //                                    lane++;
-                        //                                }
-                        //                            }
-                        //                        }
-
                     }
 
                     // speed costs
@@ -574,7 +537,6 @@ int main()
                         double y_ref = y_point;
 
                         // rotate back to normal after rotating it earlier
-                        // basis transform?
                         x_point = ( x_ref * cos ( ref_yaw ) - y_ref * sin ( ref_yaw ) );
                         y_point = ( x_ref * sin ( ref_yaw ) + y_ref * cos ( ref_yaw ) );
 
